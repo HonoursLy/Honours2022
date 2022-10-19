@@ -1,0 +1,43 @@
+#!/bin/bash
+
+"""
+
+Processing and denoising of DWI images to create DTI output files:
+- Fractional Anisotropy -> fa.nii.gz
+- Eigenvalues of V1 -> V1.nii.gz
+- Eigenvalues of DTI -> value.nii.gz
+
+Ensure specific files contain the 4D NIFTI file with diffusion data (4D.nii.gz), b0 file for masking (b0.nii.gz) and the associated bvec and bval files
+
+"""
+
+for folder in /home/rodgerj/Desktop/Cassandra2022/working_file_18_09_22/00010-selection/TKI*/TKI*/*/5/pdata/*/; do
+	[ -d "$folder" ] && cd "$folder" &&
+
+
+#Denoising 
+mrconvert -force 4D.nii.gz dti.mif
+dwidenoise -force dti.mif dti_dn.mif -noise noise.mif 
+mrdegibbs -force dti_dn.mif dti_degibbs.mif
+dwibiascorrect -force -ants -ants.b [10,3] -fslgrad bvecs bvals dti_degibbs.mif dti_preproc.mif
+mrconvert -force dti_preproc.mif dti.nii.gz
+
+#Create brain mask using fslmaths and b0
+fslmaths b0.nii.gz -bin brain_mask.nii.gz
+
+#remove background signals
+fslmaths dti.nii.gz -mas brain_mask.nii.gz dti_brain.nii.gz
+
+#dwi2tensor&tensor2metrics
+dwi2tensor -force dti_brain.nii.gz -fslgrad bvecs bvals tensor.nii.gz
+tensor2metric -force -fa fa.nii.gz -vector V1.nii.gz -value value.nii.gz tensor.nii.gz
+
+#Make ascii file 
+fsl2ascii -force V1.nii.gz V1.txt
+fslascii -force value.nii.gz value.txt
+
+done
+
+
+
+
